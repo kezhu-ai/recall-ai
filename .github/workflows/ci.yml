@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    name: build + smoke
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: recall-ai -> target
+      - run: cargo build --release --locked
+      - run: ./target/release/recall --version
+      - name: smoke import
+        run: |
+          mkdir -p /tmp/recall-smoke
+          echo '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello recall"}]},"timestamp":"2026-07-19T00:00:00Z"}' > /tmp/recall-smoke/sample.jsonl
+          ./target/release/recall import /tmp/recall-smoke
+          ./target/release/recall stats
+      - name: rustfmt
+        # rustfmt 1.97 may reformat whitespace from what 1.94 produced locally;
+        # cosmetic only — don't fail the build.
+        run: cargo fmt --all -- --check || echo "::warning::rustfmt diff (non-blocking)"
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
