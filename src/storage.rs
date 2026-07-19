@@ -9,9 +9,9 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -88,6 +88,16 @@ impl Store {
                 INSERT INTO messages_fts(rowid, content, source, role)
                 VALUES (new.id, new.content, new.source, new.role);
             END;
+            CREATE TABLE IF NOT EXISTS snippets (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT NOT NULL UNIQUE,
+                message_id   INTEGER NOT NULL,
+                description  TEXT,
+                tags         TEXT,
+                created_at   TEXT NOT NULL,
+                FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_snippets_created ON snippets(created_at);
             "#,
         )?;
         Ok(())
@@ -156,11 +166,6 @@ impl Store {
         Ok(out)
     }
 
-    pub fn open_hit(&self, _id: &str) -> Result<()> {
-        // moved to output::open_hit (needs &mut Store for borrow reasons)
-        anyhow::bail!("internal: use output::open_hit instead")
-    }
-
     pub fn digest_days(&self, days: u32) -> Result<String> {
         let mut stmt = self.conn.prepare(
             "SELECT source, role, substr(content, 1, 240), ts FROM messages
@@ -218,3 +223,105 @@ fn sanitize_fts(q: &str) -> String {
 // keep the bare import quiet
 #[allow(dead_code)]
 fn _unused_path_buf() -> PathBuf { PathBuf::new() }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Snippets (W5-8 feature)
+// ────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct Snippet {
+    pub id: i64,
+    pub name: String,
+    pub message_id: i64,
+    pub description: Option<String>,
+    pub tags: String,
+    pub created_at: String,
+    pub message_content: String,
+    pub message_role: String,
+    pub message_source: String,
+    pub message_ts: Option<DateTime<Utc>>,
+}
+
+impl Store {
+    pub fn save_snippet(&mut self, name: &str, message_id: i64, description: Option<&str>, tags: &str) -> Result<Snippet> {
+        let exists: bool = self.conn.query_row(
+            "SELECT 1 FROM messages WHERE id = ?",
+            rusqlite::params![message_id],
+            |_| Ok(true),
+        ).optional()?.unwrap_or(false);
+        if !exists {
+            anyhow::bail!("message id {} not in index (run `recall import` first?)", message_id);
+        }
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO snippets(name, message_id, description, tags, created_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(name) DO UPDATE SET message_id=excluded.message_id, description=excluded.description, tags=excluded.tags, created_at=excluded.created_at",
+            rusqlite::params![name, message_id, description, tags, now],
+        )?;
+        self.get_snippet(name)?.context("just-saved snippet missing")
+    }
+
+    pub fn list_snippets(&self, tag_filter: Option<&str>) -> Result<Vec<Snippet>> {
+        let mut sql = String::from(
+            "SELECT s.id, s.name, s.message_id, s.description, s.tags, s.created_at,
+                    m.content, m.role, m.source, m.ts
+             FROM snippets s JOIN messages m ON m.id = s.message_id",
+        );
+        let mut args: Vec<String> = Vec::new();
+        if let Some(t) = tag_filter {
+            sql.push_str(" WHERE s.tags LIKE ?");
+            args.push(format!("%{}%", t));
+        }
+        sql.push_str(" ORDER BY s.created_at DESC");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(args), |r| {
+            Ok(Snippet {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                message_id: r.get(2)?,
+                description: r.get(3)?,
+                tags: r.get(4)?,
+                created_at: r.get(5)?,
+                message_content: r.get(6)?,
+                message_role: r.get(7)?,
+                message_source: r.get(8)?,
+                message_ts: r.get::<_, Option<String>>(9)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&Utc))),
+            })
+        })?;
+        let mut out = Vec::new();
+        for r in rows { out.push(r?); }
+        Ok(out)
+    }
+
+    pub fn get_snippet(&self, name: &str) -> Result<Option<Snippet>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.id, s.name, s.message_id, s.description, s.tags, s.created_at,
+                    m.content, m.role, m.source, m.ts
+             FROM snippets s JOIN messages m ON m.id = s.message_id
+             WHERE s.name = ?",
+        )?;
+        let mut rows = stmt.query_map(rusqlite::params![name], |r| {
+            Ok(Snippet {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                message_id: r.get(2)?,
+                description: r.get(3)?,
+                tags: r.get(4)?,
+                created_at: r.get(5)?,
+                message_content: r.get(6)?,
+                message_role: r.get(7)?,
+                message_source: r.get(8)?,
+                message_ts: r.get::<_, Option<String>>(9)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&Utc))),
+            })
+        })?;
+        match rows.next() {
+            Some(r) => Ok(Some(r?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn rm_snippet(&self, name: &str) -> Result<bool> {
+        let n = self.conn.execute("DELETE FROM snippets WHERE name = ?", rusqlite::params![name])?;
+        Ok(n > 0)
+    }
+}

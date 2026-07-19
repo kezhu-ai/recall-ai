@@ -56,6 +56,10 @@ recall today             # markdown digest of today's activity
 recall week              # markdown digest of the last 7 days
 recall stats             # counts by source
 recall open <id>         # print path:line for a hit
+recall snippet save <name> <id> --tags "..."  # bookmark a message
+recall snippet list [--tag TAG]               # show all bookmarks
+recall snippet show <name> [--copy]           # print to stdout (or clipboard)
+recall snippet rm <name>                      # delete a bookmark
 recall serve             # tiny localhost web UI on :7777
 ```
 
@@ -87,7 +91,7 @@ DB file: `<data-dir>/recall.db` (SQLite + FTS5).
 ## Roadmap (per ChatGPT strategic review)
 
 - [x] **v0.1** — SQLite FTS5 index + 4 importers + CLI search + localhost UI
-- [ ] **v0.2** — `recall snippets` save / star / bookmark
+- [x] **v0.2** — `recall snippet` save / list / show / rm (with clipboard copy)
 - [ ] **v0.3** — `recall recap --week` weekly digest for sharing
 - [ ] **v0.4** — redact-on-export for safe sharing of digests
 - [ ] **v0.5** — optional embedding index for semantic search

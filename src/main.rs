@@ -9,6 +9,10 @@
 //!   import <dir>       Scan a directory of Claude Code / Codex CLI sessions
 //!   search <query>     Full-text FTS5 search across all sources
 //!   open <id>          Open the source chat at the matching line
+//!   snippet save       Bookmark a message as a named snippet
+//!   snippet list       List saved snippets (with optional tag filter)
+//!   snippet show       Print a snippet's content (optionally copy to clipboard)
+//!   snippet rm         Remove a saved snippet
 //!   today / week       Markdown digest (chronological)
 //!   stats              Counts by source
 //!   serve              Localhost web UI (default :7777)
@@ -23,6 +27,7 @@ use clap::{Parser, Subcommand};
 mod ingest;
 mod storage;
 mod output;
+mod snippet;
 
 #[derive(Parser, Debug)]
 #[command(name = "recall", version, about = "Search every AI conversation you've ever had, locally.")]
@@ -59,6 +64,12 @@ enum Cmd {
         id: String,
     },
 
+    /// Save / list / show / rm named snippets (bookmarked messages).
+    Snippet {
+        #[command(subcommand)]
+        action: SnippetCmd,
+    },
+
     /// Markdown summary of today's AI activity.
     Today,
 
@@ -72,6 +83,41 @@ enum Cmd {
     Serve {
         #[arg(long, default_value = "127.0.0.1:7777")]
         addr: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SnippetCmd {
+    /// Save a search result as a named snippet.
+    Save {
+        /// Snippet name (lowercase, no spaces; e.g. "sql-window-function")
+        name: String,
+        /// Source message row id (from `recall search` results, e.g. r-42 → 42)
+        message_id: i64,
+        /// Free-form description (one line)
+        #[arg(long)]
+        description: Option<String>,
+        /// Comma-separated tags, e.g. "sql,postgres,window"
+        #[arg(long, default_value = "")]
+        tags: String,
+    },
+    /// List saved snippets (newest first).
+    List {
+        /// Filter by tag (substring match)
+        #[arg(long)]
+        tag: Option<String>,
+    },
+    /// Print a saved snippet's content to stdout.
+    Show {
+        name: String,
+        /// Copy to clipboard via `clip.exe` (Windows) or `pbcopy` (macOS) or `wl-copy` (Linux).
+        /// If none of those are available, prints to stdout.
+        #[arg(long)]
+        copy: bool,
+    },
+    /// Remove a saved snippet.
+    Rm {
+        name: String,
     },
 }
 
@@ -95,6 +141,9 @@ fn main() -> Result<()> {
         }
         Cmd::Open { id } => {
             output::open_hit(&mut store, &id)?;
+        }
+        Cmd::Snippet { action } => {
+            snippet::run(&mut store, action)?;
         }
         Cmd::Today => {
             let digest = store.digest_days(1)?;
