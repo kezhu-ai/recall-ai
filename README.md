@@ -96,6 +96,16 @@ DB file: `<data-dir>/recall.db` (SQLite + FTS5).
 - [ ] **v0.4** — redact-on-export for safe sharing of digests
 - [ ] **v0.5** — optional embedding index for semantic search
 
+## See also — other kezhu-ai AI dev tools
+
+recall-ai is one of four Rust CLIs in the same family:
+
+- **[pinpoint](https://github.com/kezhu-ai/pinpoint)** — your `~/.bash_history` but for AI prompts. Active save/replay side of the same idea.
+- **[ctxguard](https://github.com/kezhu-ai/ctxguard)** — context-window budget enforcer for AI agents. Catches when a search result points to a runaway session.
+- **[mcp-sentry](https://github.com/kezhu-ai/mcp-sentry)** — policy-as-code firewall for MCP servers. Audit log feeds into the same AI-history index.
+
+The kit: **pinpoint** to save the keepers, **ctxguard** to budget agent use, **recall-ai** to search the firehose, **mcp-sentry** to gate the servers.
+
 ## Author
 
 Made by [@kezhu-ai](https://github.com/kezhu-ai) — also the author of [ctxguard](https://github.com/kezhu-ai/ctxguard) (context-window budget for AI agents) and [mcp-sentry](https://github.com/kezhu-ai/mcp-sentry) (policy-as-code firewall for MCP servers).
