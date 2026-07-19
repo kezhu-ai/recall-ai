@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build on ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.allow_failure }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: recall-linux-x86_64
+            binary: recall
+            allow_failure: false
+          - target: x86_64-apple-darwin
+            os: macos-13
+            artifact: recall-macos-x86_64
+            binary: recall
+            allow_failure: true
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: recall-macos-aarch64
+            binary: recall
+            allow_failure: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: recall-windows-x86_64.exe
+            binary: recall.exe
+            allow_failure: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: recall-ai -> target
+      - run: cargo build --release --locked
+      - name: Package
+        continue-on-error: true
+        run: |
+          mkdir -p dist
+          cp target/release/${{ matrix.binary }} dist/${{ matrix.artifact }}
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cd dist && powershell -NoProfile -Command "Compress-Archive -Force -Path '${{ matrix.artifact }}' -DestinationPath '${{ matrix.artifact }}.zip'" && cd ..
+          else
+            tar -C dist -czf dist/${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.tar.gz
+            dist/${{ matrix.artifact }}.zip
