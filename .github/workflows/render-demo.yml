@@ -1,0 +1,78 @@
+name: render-demo
+
+on:
+  push:
+    paths:
+      - 'demo.tape'
+      - '.github/workflows/render-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  gif:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: recall-ai -> target
+
+      - name: Build recall
+        run: cargo build --release --locked
+
+      - name: Install vhs
+        run: |
+          curl -fsSL https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_x86_64.tar.gz \
+            | tar xz -C /tmp
+          sudo mv /tmp/vhs_0.11.0_Linux_x86_64/vhs /usr/local/bin/vhs
+          vhs --version
+
+      - name: Install ffmpeg + ttyd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+
+      - name: Seed demo data
+        # We don't have real ~/.claude/projects/ on this CI runner, so seed
+        # a tiny synthetic session that exercises every command in the demo.
+        run: |
+          mkdir -p /tmp/demo-data/.claude/projects/demo
+          cat > /tmp/demo-data/.claude/projects/demo/session-abc.jsonl << 'EOF'
+          {"type":"user","message":{"role":"user","content":"how do I parse a JSONL file in Rust?"},"timestamp":"2026-07-19T07:00:00Z"}
+          {"type":"assistant","message":{"role":"assistant","content":"Use serde_json::from_str on each line."},"timestamp":"2026-07-19T07:00:05Z"}
+          {"type":"user","message":{"role":"user","content":"what about SQLite FTS5?"},"timestamp":"2026-07-19T07:15:00Z"}
+          {"type":"assistant","message":{"role":"assistant","content":"SQLite FTS5 gives you sub-millisecond BM25 search with porter stemming."},"timestamp":"2026-07-19T07:15:10Z"}
+          {"type":"user","message":{"role":"user","content":"does recall-ai use FTS5?"},"timestamp":"2026-07-19T07:18:00Z"}
+          {"type":"assistant","message":{"role":"assistant","content":"Yes — rusqlite with bundled SQLite, FTS5 virtual table, porter unicode61 tokenizer."},"timestamp":"2026-07-19T07:18:15Z"}
+          EOF
+
+          mkdir -p demo-home/.local/share
+          cd /tmp/demo-data
+          HOME=/tmp/demo-data/demo-home ../target/release/recall import /tmp/demo-data/.claude/projects/demo
+
+      - name: Render demo.gif
+        env:
+          HOME: /tmp/demo-data/demo-home
+        run: |
+          cd /tmp/demo-data/demo-home
+          /tmp/demo-data/target/release/recall import /tmp/demo-data/.claude/projects/demo || true
+          vhs /tmp/demo-data/demo.tape
+
+      - name: Verify GIF was produced
+        run: |
+          file /tmp/demo-data/demo.gif
+          du -h /tmp/demo-data/demo.gif
+
+      - name: Commit demo.gif
+        run: |
+          git config user.name "recall-bot"
+          git config user.email "bot@recall-ai.local"
+          git add demo.gif
+          git diff --cached --quiet || git commit -m "chore: regenerate demo.gif"
+          git push
