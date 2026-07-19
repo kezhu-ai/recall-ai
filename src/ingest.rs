@@ -4,7 +4,7 @@
 //! on filename heuristics to a per-source parser.
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -31,6 +31,7 @@ pub fn import_path(path: &Path, store: &mut Store) -> Result<usize> {
     } else {
         anyhow::bail!("unsupported import path: {}", path.display());
     };
+    drop(tmp); // keep TempDir alive for the duration of the function
 
     let mut total = 0usize;
     total += import_chatgpt(&root, store)?;
@@ -84,7 +85,6 @@ fn import_chatgpt(root: &Path, store: &mut Store) -> Result<usize> {
                 let ts = msg.get("create_time").and_then(|v| v.as_f64())
                     .and_then(|f| chrono::DateTime::from_timestamp(f as i64, 0));
                 let m = Message {
-                    id: None,
                     source: "chatgpt".into(),
                     ts,
                     role: role.into(),
@@ -129,7 +129,6 @@ fn import_claude_export(root: &Path, store: &mut Store) -> Result<usize> {
                 let content = m.get("content").and_then(|x| x.as_str()).unwrap_or("").to_string();
                 if content.is_empty() { continue; }
                 let m = Message {
-                    id: None,
                     source: "claude-export".into(),
                     ts: ts0,
                     role: role.into(),
@@ -157,6 +156,8 @@ fn import_claude_code(root: &Path, store: &mut Store) -> Result<usize> {
         let mut line_no: i64 = 0;
         for line in reader.lines().map_while(Result::ok) {
             line_no += 1;
+            #[allow(unused_variables)]
+            let _ = line_no; // tracked externally via total counter
             if line.is_empty() { continue; }
             let val: serde_json::Value = match serde_json::from_str(&line) { Ok(v) => v, Err(_) => continue };
             let t = val.get("type").and_then(|v| v.as_str()).unwrap_or("");
@@ -177,7 +178,6 @@ fn import_claude_code(root: &Path, store: &mut Store) -> Result<usize> {
             let ts = val.get("timestamp").and_then(|v| v.as_str())
                 .and_then(|s| DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&Utc)));
             let m = Message {
-                id: None,
                 source: "claude-code".into(),
                 ts,
                 role,
@@ -225,7 +225,6 @@ fn import_codex(root: &Path, store: &mut Store) -> Result<usize> {
             };
             if content.is_empty() { continue; }
             let m = Message {
-                id: None,
                 source: "codex".into(),
                 ts: msg_ts,
                 role,

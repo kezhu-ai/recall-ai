@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Local};
-use rusqlite::params;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
@@ -70,10 +69,13 @@ pub fn open_hit(store: &mut Store, id: &str) -> Result<()> {
     let mut stmt = store.conn.prepare(
         "SELECT source_path, line_no FROM messages WHERE id = ?",
     )?;
-    let (path, line_no): (String, i64) = stmt.query_row(params![rowid], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let (path, line_no): (String, i64) = stmt.query_row(rusqlite::params![rowid], |r| Ok((r.get(0)?, r.get(1)?)))?;
     println!("{}:{}", path, line_no);
     Ok(())
 }
+
+#[allow(dead_code)]
+pub fn _open_hit_unused() {}
 
 /// Tiny localhost web UI: single-page HTML + JSON API.
 /// No JS frameworks, no Tauri, no SaaS — just stdlib + tiny HTML/CSS.

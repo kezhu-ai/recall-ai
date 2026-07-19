@@ -9,13 +9,12 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub id: Option<i64>,
     pub source: String,
     pub ts: Option<DateTime<Utc>>,
     pub role: String,
@@ -26,7 +25,6 @@ pub struct Message {
 
 #[derive(Debug, Clone)]
 pub struct Hit {
-    pub rowid: i64,
     pub source: String,
     pub ts: Option<DateTime<Utc>>,
     pub role: String,
@@ -99,7 +97,7 @@ impl Store {
         let ts_str = m.ts.map(|t| t.to_rfc3339());
         let rows = self.conn.execute(
             "INSERT OR IGNORE INTO messages(source, ts, role, content, source_path, line_no) VALUES (?, ?, ?, ?, ?, ?)",
-            params![m.source, ts_str, m.role, m.content, m.source_path, m.line_no],
+            rusqlite::params![m.source, ts_str, m.role, m.content, m.source_path, m.line_no],
         )?;
         Ok(rows > 0)
     }
@@ -134,7 +132,6 @@ impl Store {
             rusqlite::params_from_iter(args.iter().chain(std::iter::once(&limit_str))),
             |r| {
                 Ok(Hit {
-                    rowid: r.get(0)?,
                     source: r.get(1)?,
                     ts: r.get::<_, Option<String>>(2)?.and_then(|s| DateTime::parse_from_rfc3339(&s).ok().map(|d| d.with_timezone(&Utc))),
                     role: r.get(3)?,
