@@ -1,5 +1,8 @@
 name: render-demo
 
+# Uses the shared reusable workflow from kezhu-ai/awesome-ai-history-tools.
+# Local copy: ~15 lines. Previously: ~60 lines duplicated.
+
 on:
   push:
     paths:
@@ -12,66 +15,9 @@ permissions:
 
 jobs:
   gif:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: recall-ai -> target
-
-      - name: Build recall
-        run: cargo build --release --locked
-
-      - name: Install vhs + ttyd + ffmpeg
-        run: |
-          curl -fsSL https://github.com/charmbracelet/vhs/releases/download/v0.11.0/vhs_0.11.0_Linux_x86_64.tar.gz \
-            | tar xz -C /tmp
-          sudo mv /tmp/vhs_0.11.0_Linux_x86_64/vhs /usr/local/bin/vhs
-          vhs --version
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd
-
-      - name: Seed synthetic session
-        run: |
-          mkdir -p /tmp/demo-data/.claude/projects/demo
-          cat > /tmp/demo-data/.claude/projects/demo/session-abc.jsonl <<'EOF'
-          {"type":"user","message":{"role":"user","content":"how do I parse a JSONL file in Rust?"},"timestamp":"2026-07-19T07:00:00Z"}
-          {"type":"assistant","message":{"role":"assistant","content":"Use serde_json::from_str on each line."},"timestamp":"2026-07-19T07:00:05Z"}
-          {"type":"user","message":{"role":"user","content":"what about SQLite FTS5?"},"timestamp":"2026-07-19T07:15:00Z"}
-          {"type":"assistant","message":{"role":"assistant","content":"SQLite FTS5 gives you sub-millisecond BM25 search with porter stemming."},"timestamp":"2026-07-19T07:15:10Z"}
-          {"type":"user","message":{"role":"user","content":"does recall-ai use FTS5?"},"timestamp":"2026-07-19T07:18:00Z"}
-          {"type":"assistant","message":{"role":"assistant","content":"Yes - rusqlite with bundled SQLite, FTS5 virtual table, porter unicode61 tokenizer."},"timestamp":"2026-07-19T07:18:15Z"}
-          EOF
-          ls -la /tmp/demo-data/.claude/projects/demo/
-          echo "--- seeding done ---"
-
-      - name: Import + render demo.gif
-        env:
-          HOME: /tmp/demo-home
-        run: |
-          mkdir -p $HOME
-          RECALL_DATA_DIR=$HOME/.local/share/recall ./target/release/recall import /tmp/demo-data/.claude/projects/demo
-          echo "--- search test ---"
-          RECALL_DATA_DIR=$HOME/.local/share/recall ./target/release/recall search FTS5 --days 365
-          echo "--- vhs render ---"
-          cd $HOME
-          vhs /home/runner/work/recall-ai/recall-ai/demo.tape 2>&1 | tail -5
-          ls -la demo.gif
-
-      - name: Verify GIF
-        run: |
-          cp /tmp/demo-home/demo.gif demo.gif
-          file demo.gif
-          du -h demo.gif
-
-      - name: Commit demo.gif
-        run: |
-          git config user.name "recall-bot"
-          git config user.email "bot@recall-ai.local"
-          git add demo.gif
-          git diff --cached --quiet || git commit -m "chore: regenerate demo.gif"
-          git push
+    uses: kezhu-ai/awesome-ai-history-tools/.github/workflows/render-demo.yml@main
+    with:
+      tool_name: recall-ai
+      demo_tape_path: ./demo.tape
+      run_under_home: true
+      home_dir: /tmp/demo-home
