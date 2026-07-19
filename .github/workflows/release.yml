@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    uses: kezhu-ai/awesome-ai-history-tools/.github/workflows/release.yml@main
+    uses: kezhu-ai/awesome-ai-history-tools/.github/workflows/release.yml@master
     with:
       tool_name: recall-ai
       binary: recall
