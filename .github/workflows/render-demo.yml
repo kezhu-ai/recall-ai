@@ -64,6 +64,7 @@ jobs:
 
       - name: Verify GIF
         run: |
+          cp /tmp/demo-home/demo.gif demo.gif
           file demo.gif
           du -h demo.gif
 
