@@ -54,6 +54,9 @@ recall import <path>     # .zip (ChatGPT / Claude export) or a session dir
 recall search <query>    # FTS5 substring search, ranked, source filterable
 recall today             # markdown digest of today's activity
 recall week              # markdown digest of the last 7 days
+recall recap --days 7 --format md --out week.md   # v0.3: write to file
+recall recap --days 1 --format html               # v0.3: HTML for blog/email
+recall recap --days 7 --format json               # v0.3: machine-readable
 recall stats             # counts by source
 recall open <id>         # print path:line for a hit
 recall snippet save <name> <id> --tags "..."  # bookmark a message

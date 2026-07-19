@@ -76,6 +76,20 @@ enum Cmd {
     /// Markdown summary of the last 7 days.
     Week,
 
+    /// Markdown digest (alias of `today` or `week`) with --format=md|html|json
+    /// and optional --out=path to write to a file (default: stdout).
+    Recap {
+        /// Window: 1 (today) or 7 (this week)
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Output format
+        #[arg(long, default_value = "md", value_parser = ["md", "html", "json"])]
+        format: String,
+        /// Write to file instead of stdout
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
     /// Counts by source.
     Stats,
 
@@ -152,6 +166,31 @@ fn main() -> Result<()> {
         Cmd::Week => {
             let digest = store.digest_days(7)?;
             println!("{}", digest);
+        }
+        Cmd::Recap { days, format, out } => {
+            let digest = store.digest_days(days)?;
+            let body = match format.as_str() {
+                "json" => {
+                    // Just print line count + first line as a sanity check
+                    let lines: Vec<&str> = digest.lines().collect();
+                    format!(
+                        "{{\"window_days\":{},\"lines\":{},\"preview\":\"{}\"}}",
+                        days, lines.len(), lines.first().copied().unwrap_or("").replace('"', "\\\"")
+                    )
+                }
+                "html" => format!(
+                    "<!doctype html><html><head><meta charset=\"utf-8\"><title>recall recap</title></head><body><pre>{}</pre></body></html>",
+                    digest
+                ),
+                _ => digest, // "md" is the default and what `today`/`week` already produce
+            };
+            if let Some(path) = out {
+                std::fs::write(&path, &body)
+                    .with_context(|| format!("writing {}", path.display()))?;
+                eprintln!("[recall] wrote {} bytes to {}", body.len(), path.display());
+            } else {
+                println!("{}", body);
+            }
         }
         Cmd::Stats => {
             output::print_stats(&store.stats()?);
